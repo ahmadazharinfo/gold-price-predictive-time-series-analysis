@@ -12,162 +12,130 @@
 
 ---
 
-## Project Overview
+## Overview
 
-A desktop application for forecasting gold prices using **ARIMA time-series modeling** on historical economic data including inflation rates, exchange rates, and oil prices. Built following the complete software engineering lifecycle: requirements analysis, UML modeling, layered MVC architecture, and SOLID/OOP design principles.
+A Tkinter desktop application that forecasts monthly gold prices using **ARIMA time-series modeling** on historical INR gold price data. The user enters a target year (2026 or later) and receives a full 12-month forecast in both **INR and USD**, along with a summary of the yearly average, highest, and lowest predicted months.
 
-The system delivers monthly gold price forecasts for any future year through a Tkinter GUI, with exportable prediction tables and charts.
+The project follows the complete software engineering lifecycle — requirements analysis, UML modeling (Use Case, Class, Sequence diagrams), layered MVC architecture, and SOLID/OOP design principles.
 
 ---
 
-## Repository Structure
+## Project Structure
 
 ```
-GoldPricePredictionProject/
+GoldPricePrediction/
 │
-├── main.py                      # Application entry point — orchestrates all components
-├── config.py                    # System-wide configuration (paths, ARIMA params, GUI settings)
-├── requirements.txt             # Python dependencies
+├── main/
+│   ├── main.py               # GoldPriceApp — entry point, wires all components
+│   └── main.ipynb            # Jupyter notebook version for exploration
 │
-├── Core Application — 10 OOP Classes
-│   ├── data_loader.py           # DataLoader       — loads CSV data from disk
-│   ├── data_preprocessor.py     # DataPreprocessor — cleans and prepares time-series data
-│   ├── model_trainer.py         # ModelTrainer     — trains and serializes ARIMA model
-│   ├── predictor.py             # Predictor        — generates monthly/yearly forecasts
-│   ├── validator.py             # Validator        — validates user input and data integrity
-│   ├── model_manager.py         # ModelManager     — coordinates full model lifecycle
-│   ├── results_formatter.py     # ResultsFormatter — formats and exports prediction results
-│   ├── gui_controller.py        # GUIController    — business logic layer between GUI and model
-│   └── gui_app.py               # GoldPricePredictionGUI — Tkinter presentation layer
+├── model/                    # ML layer — data handling and ARIMA model
+│   ├── __init__.py
+│   ├── arima_config.py       # ArimaConfig       — stores (p, d, q) order
+│   ├── arima_model.py        # ArimaModel        — trains and forecasts with ARIMA
+│   ├── data_loader.py        # DataLoader        — reads and parses GoldPriceDataset.csv
+│   └── data_preprocessor.py  # DataPreprocessor  — sets DatetimeIndex, forward-fills gaps
 │
-├── Utilities
-│   ├── generate_sample_data.py  # Generates synthetic gold price CSV for testing
-│   └── quick_start.py           # Automated setup and first-run script
+├── utils/                    # Business logic layer
+│   ├── __init__.py
+│   ├── prediction_service.py # PredictionService — computes forecasts per target year
+│   ├── currency_converter.py # CurrencyConverter — converts INR → USD (static utility)
+│   └── data_validator.py     # DataValidator     — validates year and numeric inputs
 │
-├── Documentation
-│   ├── README.md                # This file
-│   ├── ARCHITECTURE.md          # Full layered architecture and component diagrams
-│   ├── USER_GUIDE.md            # Step-by-step user instructions
-│   └── PROJECT_SUMMARY.md       # Project deliverables overview
+├── gui/                      # Presentation layer
+│   ├── __init__.py
+│   ├── main_window.py        # MainWindow        — dark-themed Tkinter UI (560×740)
+│   └── prediction_formatter.py # PredictionFormatter — formats results as text table
 │
-├── data/                        # Created automatically on first run
-│   └── gold_prices.csv          # Gold price dataset (place here after download)
+├── data/
+│   └── GoldPriceDataset.csv  # 240 months of INR gold prices (May 2004 → May 2024)
 │
-├── models/                      # Created automatically on first run
-│   └── arima_model.pkl          # Serialized trained ARIMA model
-│
-└── Project Documents/
-    ├── Gold_Price_Prediction_Project.pdf      # Requirements & Use-Case Specification
-    └── GoldPricePredictionProject_Report.pdf  # Full technical report with UML diagrams
+├── requirements.txt
+├── README.md
+└── .gitignore
 ```
 
 ---
 
 ## Architecture
 
-The system follows a **4-layer MVC architecture** ensuring modularity, scalability, and maintainability:
+The system follows a **3-layer MVC architecture**:
 
 ```
-┌─────────────────────────────────────────┐
-│         Presentation Layer              │
-│         GoldPricePredictionGUI          │  ← gui_app.py
-└──────────────────┬──────────────────────┘
+┌──────────────────────────────────────┐
+│          Presentation Layer          │
+│  MainWindow · PredictionFormatter    │   ← gui/
+└──────────────────┬───────────────────┘
+                   │  callback (on_predict)
+┌──────────────────▼───────────────────┐
+│         Business Logic Layer         │
+│  PredictionService                   │   ← utils/
+│  DataValidator · CurrencyConverter   │
+└──────────────────┬───────────────────┘
                    │
-┌──────────────────▼──────────────────────┐
-│           Controller Layer              │
-│           GUIController                 │  ← gui_controller.py
-└──────────────────┬──────────────────────┘
+┌──────────────────▼───────────────────┐
+│           ML / Data Layer            │
+│  DataLoader · DataPreprocessor       │   ← model/
+│  ArimaConfig · ArimaModel            │
+└──────────────────┬───────────────────┘
                    │
-┌──────────────────▼──────────────────────┐
-│         Business Logic Layer            │
-│   ModelManager · Validator ·            │  ← model_manager.py
-│   ResultsFormatter                      │    validator.py
-└──────────────────┬──────────────────────┘    results_formatter.py
-                   │
-┌──────────────────▼──────────────────────┐
-│       Data / Model Layer                │
-│   DataLoader · DataPreprocessor ·       │  ← data_loader.py
-│   ModelTrainer · Predictor              │    data_preprocessor.py
-└──────────────────┬──────────────────────┘    model_trainer.py
-                   │                           predictor.py
-            gold_prices.csv
+           GoldPriceDataset.csv
+```
+
+**Entry point** — `GoldPriceApp` in `main/main.py` instantiates and wires all layers:
+
+```
+GoldPriceApp
+ ├── DataLoader          → loads CSV
+ ├── DataPreprocessor    → cleans & indexes the time series
+ ├── ArimaModel(ArimaConfig(p=1, d=1, q=1)) → trains on historical data
+ ├── PredictionService   → wraps model, computes year-specific forecasts
+ └── MainWindow(root, _predict) → GUI with callback into GoldPriceApp._predict()
 ```
 
 ---
 
-## Class Responsibilities
+## Class Reference
 
-| Class | File | Responsibility | OOP Principle |
-|---|---|---|---|
-| `Config` | `config.py` | System-wide constants and paths | High Cohesion — no dependencies |
-| `DataLoader` | `data_loader.py` | Load CSV from disk | Low Coupling — depends only on Config |
-| `DataPreprocessor` | `data_preprocessor.py` | Clean and prepare time-series data | Encapsulation of data cleaning logic |
-| `ModelTrainer` | `model_trainer.py` | Train and persist ARIMA model | Single Responsibility |
-| `Predictor` | `predictor.py` | Generate monthly/yearly forecasts | Abstraction — hides ARIMA internals |
-| `Validator` | `validator.py` | Validate input and data integrity | Static utility — no state |
-| `ModelManager` | `model_manager.py` | Orchestrate model lifecycle | Composition over inheritance |
-| `ResultsFormatter` | `results_formatter.py` | Format and export results | Static utility — no state |
-| `GUIController` | `gui_controller.py` | Business logic between GUI and model | Low Coupling — MVC Controller |
-| `GoldPricePredictionGUI` | `gui_app.py` | Tkinter interface and user events | Encapsulation of all UI logic |
+### `model/` — ML & Data Layer
 
----
+| Class | File | Responsibility |
+|---|---|---|
+| `ArimaConfig` | `arima_config.py` | Stores ARIMA `(p, d, q)` order; accepts either a tuple or individual `p`, `d`, `q` params |
+| `ArimaModel` | `arima_model.py` | Wraps statsmodels ARIMA — `train(series)` fits the model, `forecast(steps)` returns predictions |
+| `DataLoader` | `data_loader.py` | Reads CSV, strips commas from prices, parses `MMM-YY` dates, sorts ascending |
+| `DataPreprocessor` | `data_preprocessor.py` | Sets `Date` as `DatetimeIndex` with monthly frequency (`MS`), forward-fills any gaps |
 
-## OOP Design Principles Applied
+### `utils/` — Business Logic Layer
 
-**Encapsulation** — Each class hides its internal state and exposes only what is needed. `ModelTrainer` manages ARIMA fitting internally; callers only see `train()` and `save()`.
+| Class | File | Responsibility |
+|---|---|---|
+| `PredictionService` | `prediction_service.py` | Calculates total forecast steps from dataset end (May 2024) to target year, returns last 12 months |
+| `CurrencyConverter` | `currency_converter.py` | Static `inr_to_usd(value)` at a fixed rate (0.012 INR/USD) |
+| `DataValidator` | `data_validator.py` | Static `validate_year(year)` — rejects years before 2026; `validate_positive(value, name)` |
 
-**Abstraction** — `Predictor` abstracts away ARIMA forecasting complexity. The GUI layer never interacts directly with statsmodels.
+### `gui/` — Presentation Layer
 
-**Polymorphism** — `GUIController` works with model components through consistent interfaces, making it easy to swap ARIMA for LSTM or Prophet without changing the controller.
-
-**High Cohesion / Low Coupling** — Each class has one responsibility. Communication flows through well-defined interfaces: `GUI → GUIController → ModelManager → {Data + Model classes}`.
-
-**SOLID Principles** — Single Responsibility across all 10 classes; Open/Closed (new models can be added without modifying existing classes); Dependency Inversion (controller depends on abstractions, not concrete implementations).
+| Class | File | Responsibility |
+|---|---|---|
+| `MainWindow` | `main_window.py` | Dark-themed Tkinter window (560×740 px); year entry, Predict button, scrollable results panel, status indicator |
+| `PredictionFormatter` | `prediction_formatter.py` | Static `format(predictions, converter)` — renders 12-month INR/USD table plus yearly summary (avg, high, low) |
 
 ---
 
-## Installation & Setup
+## OOP Design Principles
 
-### Step 1 — Install Python 3.7+
-Download from [python.org](https://www.python.org/) and make sure to check **"Add Python to PATH"** during installation.
+**Encapsulation** — Each class manages its own state privately. `ArimaModel` holds `model_fit` internally; callers only use `train()` and `forecast()`. `MainWindow` keeps all widget references private.
 
-### Step 2 — Install dependencies
-```bash
-pip install -r requirements.txt
-```
+**Abstraction** — `PredictionService.predict_year(year)` hides all step-counting arithmetic from the rest of the system. The GUI never touches `statsmodels` directly.
 
-Installs: `pandas` · `numpy` · `statsmodels` · `matplotlib` · `python-dateutil`
+**Polymorphism** — `PredictionFormatter.format()` accepts any `converter` with an `inr_to_usd()` method, making it easy to swap `CurrencyConverter` for a live-rate implementation without changing the formatter.
 
-### Step 3 — Get the dataset
+**Single Responsibility** — Every class has exactly one job: `DataLoader` only loads, `DataPreprocessor` only preprocesses, `DataValidator` only validates, and so on.
 
-**Option A — Real dataset (recommended):**
-1. Download from [Kaggle — Gold Price Prediction with Time Series Analysis](https://www.kaggle.com/datasets/harshjaglan01/gold-price-prediction-with-time-series-analysis)
-2. Place the CSV file in the `data/` folder and rename it `gold_prices.csv`
+**Low Coupling** — Layers communicate through clean interfaces. `GoldPriceApp` passes a callback (`_predict`) into `MainWindow` so the GUI never imports from `model/` or `utils/` directly.
 
-**Option B — Sample data (for testing):**
-```bash
-python generate_sample_data.py
-```
-
-### Step 4 — Run the application
-```bash
-python main.py
-```
-
-Or use the automated setup script which handles everything:
-```bash
-python quick_start.py
-```
-
----
-
-## Usage
-
-1. **Enter Year** — type a year (2026 or later) in the input field
-2. **Generate Prediction** — click the button to run ARIMA forecasting
-3. **View Results** — monthly predictions and yearly average are displayed in the results panel
-4. **Export** — save predictions to a `.txt` file
-5. **Retrain** — if you update the dataset, retrain the model from the GUI
+**High Cohesion** — Each package (`model/`, `utils/`, `gui/`) groups only related classes with a focused, single purpose.
 
 ---
 
@@ -175,43 +143,91 @@ python quick_start.py
 
 | Property | Value |
 |---|---|
-| Source | Kaggle — Gold Price Prediction with Time Series Analysis |
-| Format | CSV with `Date` and `Price` columns |
-| Location | `data/gold_prices.csv` |
-| Purpose | Historical gold prices for ARIMA time-series training |
+| File | `data/GoldPriceDataset.csv` |
+| Columns | `Date` (MMM-YY format), `Price` (INR, comma-formatted) |
+| Coverage | May 2004 → May 2024 (240 monthly records) |
+| Source | Historical Indian gold prices |
 
-Economic indicators used in analysis: inflation rates (CPI), US Dollar Index (DXY), crude oil prices, interest rates (FED data), S&P 500, NASDAQ Composite.
-
----
-
-## UML Diagrams
-
-All UML diagrams are documented in the technical report (`GoldPricePredictionProject_Report.pdf`):
-
-- **Use Case Diagram** — 4-phase system flow (Data Verification → Model Training → Prediction → Export)
-- **Class Diagram** — 10 classes with attributes, methods, and relationships
-- **Sequence Diagram** — complete Generate Prediction flow across all components
+The dataset is loaded, cleaned (commas stripped, dates parsed to `datetime`), sorted ascending, and converted to a monthly `DatetimeIndex` time series before ARIMA training.
 
 ---
 
-## Dependencies
+## Installation
 
+**Requirements:** Python 3.8+, tkinter (bundled with standard Python)
+
+```bash
+pip install -r requirements.txt
 ```
-pandas>=1.3.0
-numpy>=1.21.0
-statsmodels>=0.13.0
-matplotlib>=3.4.0
-python-dateutil>=2.8.0
+
+Dependencies:
+```
+pandas>=2.0.0
+statsmodels>=0.14.0
+```
+
+---
+
+## Running the Application
+
+```bash
+cd main
+python main.py
+```
+
+Or open `main/main.ipynb` in Jupyter for the notebook version.
+
+---
+
+## Usage
+
+1. **Launch** — run `python main/main.py`
+2. **Enter year** — type any year from **2026 onwards** in the input field
+3. **Predict** — click `PREDICT ▸` or press `Enter`
+4. **Read results** — the scrollable panel shows a 12-month table with INR and USD prices, plus a summary
+
+### Example output
+```
+  ◈  MONTHLY GOLD PRICE FORECAST
+  ──────────────────────────────────────────────
+  Month              INR              USD
+  ──────────────────────────────────────────────
+  January       85,412.30          1,024.95
+  February      86,100.44          1,033.21
+  ...
+  December      91,120.88          1,093.45
+  ──────────────────────────────────────────────
+
+  ▲  SUMMARY
+  Average       87,243.10 INR  |   1,046.92 USD
+  Highest       91,120.88 INR  (December)
+  Lowest        84,890.12 INR  (January)
+```
+
+---
+
+## ARIMA Configuration
+
+The model is initialized with `ArimaConfig(p=1, d=1, q=1)` in `main.py`. To experiment with different parameters:
+
+```python
+# In main/main.py — _setup_model()
+self.model = ArimaModel(
+    ArimaConfig(p=5, d=1, q=0)     # alternative order
+)
+
+# Or pass a tuple directly
+ArimaConfig(order=(5, 1, 2))
 ```
 
 ---
 
 ## Tech Stack
 
-`Python 3.7+` · `ARIMA (statsmodels)` · `Tkinter` · `pandas` · `numpy` · `pickle` · `OOP` · `MVC` · `UML`
+`Python 3.8+` · `ARIMA (statsmodels)` · `Tkinter` · `pandas` · `OOP` · `MVC` · `UML`
 
 ---
 
 ## Disclaimer
 
-This project is developed for academic purposes as a graduation project submission at the University of Basrah, 2024–2025.
+Developed as an academic graduation project at the University of Basrah, 2024–2025. Predictions are based on historical patterns only and are not intended as financial advice.
